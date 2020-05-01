@@ -1,27 +1,6 @@
 /*
-Undercabinet Lights
-Motion sensing lights, also overwritable with a switch.  Probably on an esp8266.
-
-Setup:
-Fetch stored wifi config from EEPROM.
-Attempt to connect to stored wifi
-If unavailable, launch AP on default address
-Initialize RTC module.
-Initialize PIR module.
-Initialize LEDs
-
-Loop:
-If motion sensor detects new motion, light state to FADE_IN
-Switch state
-IDLE: LEDs off
-FADE_IN: map current time to LED color/brightness
-
-
-Webpage:
-Accept new wifi config.  Store in EEPROM and restart.
-Display current time.  Allow time to be set.
-Display bright and cool colors.
-
+Nick’s Undercabinet Lights
+Motion sensing lights, also overwritable with a switch.
 */
 
 // Required Libraries:
@@ -46,15 +25,26 @@ CRGB leds[NUM_LEDS];
 #include <Bounce2.h>
 #define PIR_SENSOR_PIN  2
 #define PIR_ENABLE_BTN_PIN 6
-#define PIR_MOTION_DETECTED HIGH
+#define PIR_ENABLED LOW
 Bounce pirSensor = Bounce();
 Bounce pirEnableBtn = Bounce();
 bool pirEnabled = true;
+
+// Photocell config
+#define PHOTOCELL_PIN A0
+#define PHOTOCELL_READS_PER_MINUTE 60
+unsigned long photocellReading = 0;
 
 // Timer conifg
 #include <Chrono.h>
 #include <LightChrono.h>
 LightChrono fillTimer;
+
+// Manual On switch config
+#define MANUAL_ON_PIN 4
+#define MANUAL_ON LOW
+Bounce manualOnSwitch = Bounce();
+bool forceOn = false;
 
 // State variables
 enum states {
@@ -66,11 +56,23 @@ enum states {
 enum states state = IDLE_STATE;
 bool isTransitioning = true;
 
+// Day/Night brightness settings
+#define PHOTOCELL_DAY_THRESHOLD 350
+#define PHOTOCELL_NIGHT_THRESHOLD 200
+uint8_t DAY_BRIGHTNESS = 255;
+uint8_t NIGHT_BRIGHTNESS = 120;
+enum modes {
+  DAY_MODE,
+  NIGHT_MODE,
+};
+enum modes mode = DAY_MODE;
+uint8_t brightness = DAY_BRIGHTNESS;
+
+
 // Misc variables
 unsigned long TOTAL_ANIM_MILLIS = 700UL;
-uint8_t DAYTIME_BRIGHTNESS = 255;
 
-// Utility method
+// Utility methods
 void updateLeds(bool force=false) {
     // Update the LEDs
     static LightChrono ledsTimer;
@@ -78,6 +80,16 @@ void updateLeds(bool force=false) {
         ledsTimer.restart();
         FastLED.show();
     }
+}
+
+void updatePhotocell(bool force=false) {
+  static LightChrono photoTimer;
+  if (force || photoTimer.hasPassed(60000UL / PHOTOCELL_READS_PER_MINUTE)) {
+    photoTimer.restart();
+    photocellReading = analogRead(PHOTOCELL_PIN);
+    Serial.print("Photocell reading: ");
+    Serial.println(photocellReading);
+  }
 }
 
 void setup() {
@@ -94,7 +106,11 @@ void setup() {
     pirSensor.attach(PIR_SENSOR_PIN, INPUT);
     pirSensor.interval(50); // Use a debounce interval of 50 milliseconds
     pirEnableBtn.attach(PIR_ENABLE_BTN_PIN, INPUT_PULLUP);
-
+    
+    // Setup manual on switch
+    manualOnSwitch.attach(MANUAL_ON_PIN, INPUT_PULLUP);
+    forceOn = manualOnSwitch.read() == MANUAL_ON;
+    
     pinMode(LED_BUILTIN, OUTPUT);
 }
 
@@ -102,7 +118,7 @@ void loop() {
     // Update PIR sensor
     if (pirEnabled && pirSensor.update()) {
       Serial.print("motion change: ");
-      if (pirSensor.read() == PIR_MOTION_DETECTED) {
+      if (pirSensor.rose()) {
         Serial.println("detected");
         digitalWrite(LED_BUILTIN, HIGH);
       } else {
@@ -112,10 +128,20 @@ void loop() {
     }
 
 
-    // Update button
+    // Update PIR enabled button
     if (pirEnableBtn.update()) {
         // Toggle PIR sensor reading on or off
-        pirEnabled = pirEnableBtn.fell();
+        pirEnabled = pirEnableBtn.read() == LOW;
+    }
+    
+    // Update manual on switch
+    if (manualOnSwitch.update()) {
+      forceOn = manualOnSwitch.read() == MANUAL_ON;
+      if (forceOn) {
+        Serial.println("Manual On engaged");
+      } else {
+        Serial.println("Manual On disengaged");
+      }
     }
 
     switch (state) {
@@ -152,12 +178,38 @@ void tickIdle() {
       leds[i] = CHSV(0, 0, 0);
     }
     updateLeds(true);
+    
+    updatePhotocell(true);
+  }
+  
+  // Update ambient light reading
+  updatePhotocell();
+  
+  // When ambient light changes between day and night, change max brightness
+  if (mode == NIGHT_MODE && photocellReading > PHOTOCELL_DAY_THRESHOLD) {
+    // Transition from night to day mode
+    mode = DAY_MODE;
+    brightness = DAY_BRIGHTNESS;
+    Serial.println("It's getting light. Transitioning to day mode.");
+  } else if(mode == DAY_MODE && photocellReading < PHOTOCELL_NIGHT_THRESHOLD) {
+    // Transition from day to night mode
+    mode = NIGHT_MODE;
+    brightness = NIGHT_BRIGHTNESS;
+    Serial.println("It's getting dark. Transitioning to night mode.");
   }
   
   // When motion is detected, transition to LIGHTS_TRANSITION_ON_STATE
-  if (pirSensor.rose()) {
+  if (pirEnabled && pirSensor.rose()) {
     state = LIGHTS_TRANSITION_ON_STATE;
     isTransitioning = true;
+    return;
+  }
+  
+  // When manual on switch is engaged, transition to LIGHTS_TRANSITION_ON_STATE
+  if (forceOn) {
+    state = LIGHTS_TRANSITION_ON_STATE;
+    isTransitioning = true;
+    return;
   }
 }
 
@@ -180,7 +232,7 @@ void tickLightsTransitionOn() {
     }
     
     // fade leds in for 1 second
-    lightProgressive(DAYTIME_BRIGHTNESS, fillTimer.elapsed(), 0, TOTAL_ANIM_MILLIS);
+    lightProgressive(brightness, fillTimer.elapsed(), 0, TOTAL_ANIM_MILLIS);
     updateLeds();
     // old scratchpad stuff but maybe useful someday:
     // unsigned long MILLIS_PER_LED = TOTAL_ANIM_MILLIS / NUM_LEDS;
@@ -209,17 +261,18 @@ void tickLightsOn() {
         
         // Enable all LEDs
         for(uint8_t i=0; i<NUM_LEDS; i++) {
-          leds[i] = CHSV(0, 0, DAYTIME_BRIGHTNESS);
+          leds[i] = CHSV(0, 0, brightness);
         }
         updateLeds(true);
     }
     
     // if no motion has been detected for a while, turn the lights off
-    if (pirSensor.fell()) {
-      state = LIGHTS_TRANSITION_OFF_STATE;
-      isTransitioning = true;
+    if (!forceOn && (!pirEnabled || pirSensor.read() == LOW)) {
+        state = LIGHTS_TRANSITION_OFF_STATE;
+        isTransitioning = true;
+        return;
     }
-}
+}       
 
 
 // state: LIGHTS_TRANSITION_OFF_STATE
