@@ -25,7 +25,7 @@ WiFiManager wifiManager;
 // LED config
 #include <FastLED.h>
 #define LED_FPS     30
-#define LED_PIN     2
+#define LED_PIN     5
 #define COLOR_ORDER RGB
 #define CHIPSET     WS2811
 #define NUM_LEDS    8
@@ -37,8 +37,8 @@ CRGB leds[NUM_LEDS];
 
 // PIR Sensor config
 #include <Bounce2.h>
-#define PIR_SENSOR_PIN  1
-#define PIR_ENABLE_BTN_PIN 3
+#define PIR_SENSOR_PIN  4
+#define PIR_ENABLE_BTN_PIN 14
 #define PIR_ENABLED LOW
 Bounce pirSensor = Bounce();
 Bounce pirEnableBtn = Bounce();
@@ -55,7 +55,7 @@ unsigned long photocellReading = 0;
 LightChrono fillTimer;
 
 // Manual On switch config
-#define MANUAL_ON_PIN 4
+#define MANUAL_ON_PIN 12
 #define MANUAL_ON HIGH
 Bounce manualOnSwitch = Bounce();
 bool forceOn = false;
@@ -126,9 +126,8 @@ void setup() {
 
     // Setup WiFi
     // If connection to network stored in memory fails, launch an access point.
-    const char getFmt[] PROGMEM = "ESP%s";
     char ssid[13] = "";
-    sprintf_P(ssid, getFmt, ESP.getChipId());
+    sprintf_P(ssid, "ESP%s", ESP.getChipId());
     wifiManager.autoConnect(ssid, WIFI_PASSWORD);
 
     // Setup Remote Reprogramming
@@ -180,7 +179,7 @@ void setup() {
     // Setup PIR Sensor
     pirSensor.attach(PIR_SENSOR_PIN, INPUT);
     pirSensor.interval(50); // Use a debounce interval of 50 milliseconds
-    pirEnableBtn.attach(PIR_ENABLE_BTN_PIN, INPUT_PULLUP);
+    pirEnableBtn.attach(PIR_ENABLE_BTN_PIN, INPUT);
     
     // Setup manual on switch
     manualOnSwitch.attach(MANUAL_ON_PIN, INPUT);
@@ -206,7 +205,7 @@ void loop() {
     // Update PIR enabled button
     if (pirEnableBtn.update()) {
         // Toggle PIR sensor reading on or off
-        pirEnabled = pirEnableBtn.read() == LOW;
+        pirEnabled = pirEnableBtn.read() == HIGH;
     }
     
     // Update manual on switch
