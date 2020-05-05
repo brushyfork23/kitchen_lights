@@ -1,5 +1,6 @@
 /*
 Nick’s Undercabinet Lights
+Compile for: Lolin D1 Mini (ESP8266)
 Motion sensing lights, also overwritable with a switch.
 */
 
@@ -7,11 +8,24 @@ Motion sensing lights, also overwritable with a switch.
 // Bounce2 - Version: Latest - https://github.com/thomasfredericks/Bounce2
 // Chrono - Version: Latest - https://github.com/SofaPirate/Chrono
 // FastLED - Version: Latest - https://github.com/FastLED/FastLED
+// WiFiManager - Version: Latest - https://github.com/tzapu/WiFiManager
+
+// Wifi config
+#include <ESP8266WiFi.h>          //ESP8266 Core WiFi Library
+#include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
+#include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
+#include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
+WiFiManager wifiManager;
+#define WIFI_PASSWORD "wifipassword"
+
+// OTA config
+#include <ArduinoOTA.h>
+#define OTA_PASSWORD_HASH "36c3c743a4ba3814668066866f2f6089" // MD5 ("otapassword") = 36c3c743a4ba3814668066866f2f6089
 
 // LED config
 #include <FastLED.h>
 #define LED_FPS     30
-#define LED_PIN     3
+#define LED_PIN     2
 #define COLOR_ORDER RGB
 #define CHIPSET     WS2811
 #define NUM_LEDS    8
@@ -23,8 +37,8 @@ CRGB leds[NUM_LEDS];
 
 // PIR Sensor config
 #include <Bounce2.h>
-#define PIR_SENSOR_PIN  2
-#define PIR_ENABLE_BTN_PIN 6
+#define PIR_SENSOR_PIN  1
+#define PIR_ENABLE_BTN_PIN 3
 #define PIR_ENABLED LOW
 Bounce pirSensor = Bounce();
 Bounce pirEnableBtn = Bounce();
@@ -42,12 +56,13 @@ LightChrono fillTimer;
 
 // Manual On switch config
 #define MANUAL_ON_PIN 4
-#define MANUAL_ON LOW
+#define MANUAL_ON HIGH
 Bounce manualOnSwitch = Bounce();
 bool forceOn = false;
 
 // State variables
 enum states {
+    INIT_WIFI_STATE,                // Initail boot state: Either connect to a stored WiFi network or launch an 
     IDLE_STATE,                     // Everything is off.  Awaiting instructions.
     LIGHTS_TRANSITION_ON_STATE,     // Manually engaged or movement detected.  Animate turning the LEDs on.
     LIGHTS_ON_STATE,                // LEDs on.  Awaiting input or detecting lack of movement.
@@ -82,6 +97,12 @@ void updateLeds(bool force=false) {
     }
 }
 
+void clearLeds() {
+    for(uint8_t i=0; i<NUM_LEDS; i++) {
+      leds[i] = CHSV(0, 0, 0);
+    }
+}
+
 void updatePhotocell(bool force=false) {
   static LightChrono photoTimer;
   if (force || photoTimer.hasPassed(60000UL / PHOTOCELL_READS_PER_MINUTE)) {
@@ -101,6 +122,60 @@ void setup() {
     // Setup LEDs
     FastLED.addLeds<CHIPSET, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
     FastLED.setBrightness( BRIGHTNESS );
+    clearLeds();
+
+    // Setup WiFi
+    // If connection to network stored in memory fails, launch an access point.
+    const char getFmt[] PROGMEM = "ESP%s";
+    char ssid[13] = "";
+    sprintf_P(ssid, getFmt, ESP.getChipId());
+    wifiManager.autoConnect(ssid, WIFI_PASSWORD);
+
+    // Setup Remote Reprogramming
+    // Port defaults to 8266
+  // ArduinoOTA.setPort(8266);
+
+  // Hostname defaults to esp8266-[ChipID]
+  // ArduinoOTA.setHostname("myesp8266");
+
+  // No authentication by default
+  // ArduinoOTA.setPassword("admin");
+
+  // Password can be set with it's md5 value as well
+  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
+    ArduinoOTA.setPasswordHash(OTA_PASSWORD_HASH);
+    ArduinoOTA.onStart([]() {
+        String type;
+        if (ArduinoOTA.getCommand() == U_FLASH) {
+        type = "sketch";
+        } else { // U_SPIFFS
+        type = "filesystem";
+        }
+
+        // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+        Serial.println("Start updating " + type);
+    });
+    ArduinoOTA.onEnd([]() {
+        Serial.println("\nEnd");
+    });
+    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+        Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+    });
+    ArduinoOTA.onError([](ota_error_t error) {
+        Serial.printf("Error[%u]: ", error);
+        if (error == OTA_AUTH_ERROR) {
+        Serial.println("Auth Failed");
+        } else if (error == OTA_BEGIN_ERROR) {
+        Serial.println("Begin Failed");
+        } else if (error == OTA_CONNECT_ERROR) {
+        Serial.println("Connect Failed");
+        } else if (error == OTA_RECEIVE_ERROR) {
+        Serial.println("Receive Failed");
+        } else if (error == OTA_END_ERROR) {
+        Serial.println("End Failed");
+        }
+    });
+    ArduinoOTA.begin();
 
     // Setup PIR Sensor
     pirSensor.attach(PIR_SENSOR_PIN, INPUT);
@@ -108,7 +183,7 @@ void setup() {
     pirEnableBtn.attach(PIR_ENABLE_BTN_PIN, INPUT_PULLUP);
     
     // Setup manual on switch
-    manualOnSwitch.attach(MANUAL_ON_PIN, INPUT_PULLUP);
+    manualOnSwitch.attach(MANUAL_ON_PIN, INPUT);
     forceOn = manualOnSwitch.read() == MANUAL_ON;
     
     pinMode(LED_BUILTIN, OUTPUT);
@@ -173,10 +248,8 @@ void tickIdle() {
     // Log the state transition
     Serial.println("AWAITING INPUT");
 
-    // Clear all LEDs
-    for(uint8_t i=0; i<NUM_LEDS; i++) {
-      leds[i] = CHSV(0, 0, 0);
-    }
+    clearLeds();
+
     updateLeds(true);
     
     updatePhotocell(true);
