@@ -16,6 +16,7 @@ Motion sensing lights, also overwritable with a switch.
 #include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
 #include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
 WiFiManager wifiManager;
+#define SSID_PREFIX "Under-Cabinet Lights"
 #define WIFI_PASSWORD "wifipassword"
 #define WIFI_RESET_BTN_PIN 5
 #define WIFI_RESET_BTN_TYPE INPUT_PULLUP
@@ -42,6 +43,7 @@ CRGB leds[NUM_LEDS];
 
 // PIR Sensor config
 #define PIR_SENSOR_PIN  14
+#define MOTION_DETECTED HIGH
 #define PIR_ENABLE_BTN_PIN 12
 #define PIR_ENABLE_BTN_TYPE INPUT_PULLUP
 #define PIR_ENABLED LOW
@@ -133,7 +135,7 @@ void setup() {
     // Setup WiFi
     // If connection to network stored in memory fails, launch an access point.
     char ssid[13] = "";
-    sprintf(ssid, "ESP%d", ESP.getChipId());
+    sprintf(ssid, "%s %d", SSID_PREFIX, ESP.getChipId());
     Serial.print("If cannot connect, will lauch ssid: ");
     Serial.println(ssid);
     wifiManager.setConfigPortalBlocking(false);
@@ -209,6 +211,8 @@ void loop() {
 
     // Update WiFi reset button
     if (wifiResetBtn.update() && wifiResetBtn.read() == WIFI_RESET) {
+      clearLeds();
+      updateLeds(true);
       wifiManager.resetSettings();
       wifiManager.reboot();
     }
@@ -216,7 +220,7 @@ void loop() {
     // Update PIR sensor
     if (pirSensor.update()) {
       Serial.print("motion change: ");
-      if (pirSensor.rose()) {
+      if (pirSensor.read() == MOTION_DETECTED) {
         Serial.println("detected");
         digitalWrite(LED_BUILTIN, LOW);
       } else {
@@ -295,7 +299,7 @@ void tickIdle() {
   }
   
   // When motion is detected, transition to LIGHTS_TRANSITION_ON_STATE
-  if (pirEnabled && pirSensor.rose()) {
+  if (pirEnabled && pirSensor.read() == MOTION_DETECTED) {
     state = LIGHTS_TRANSITION_ON_STATE;
     isTransitioning = true;
     return;
@@ -363,7 +367,7 @@ void tickLightsOn() {
     }
     
     // if no motion has been detected for a while, turn the lights off
-    if (!forceOn && (!pirEnabled || pirSensor.read() == LOW)) {
+    if (!forceOn && (!pirEnabled || pirSensor.read() != MOTION_DETECTED)) {
         state = LIGHTS_TRANSITION_OFF_STATE;
         isTransitioning = true;
         return;
