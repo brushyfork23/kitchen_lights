@@ -8,7 +8,7 @@ Motion sensing lights, also overwritable with a switch.
 // Bounce2 - Version: Latest - https://github.com/thomasfredericks/Bounce2
 // Chrono - Version: Latest - https://github.com/SofaPirate/Chrono
 // FastLED - Version: Latest - https://github.com/FastLED/FastLED
-// WiFiManager - Version: Development branch commit 293f705b0ff29f5c78443a1f181a9872875aeac6 - https://github.com/tzapu/WiFiManager/
+// WiFiManager - Version: Development branch commit 293f705b0ff29f5c78443a1f181a9872875aeac6 to support non-blocking startup - https://github.com/tzapu/WiFiManager/
 
 // Wifi config
 #include <ESP8266WiFi.h>          //ESP8266 Core WiFi Library
