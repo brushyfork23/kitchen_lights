@@ -1,77 +1,69 @@
-/*
-Nick’s Undercabinet Lights
-Compile for: Lolin D1 Mini (ESP8266)
-Motion sensing lights, also overwritable with a switch.
-*/
+/**
+ * Kitchen under-cabinet motion sensing lights.
+ * This controller drives two strips of SK6812 RGBW LEDs.
+ * When motion is detected from the PIR sensor, the lights turn on.
+ * A photocell detects when the ambient room light has dimmed and
+ * dims the LEDs accordingly.
+ */
 
-// Required Libraries:
-// Bounce2 - Version: Latest - https://github.com/thomasfredericks/Bounce2
-// Chrono - Version: Latest - https://github.com/SofaPirate/Chrono
-// FastLED - Version: Latest - https://github.com/FastLED/FastLED
-// WiFiManager - Version: Development branch commit 293f705b0ff29f5c78443a1f181a9872875aeac6 to support non-blocking startup - https://github.com/tzapu/WiFiManager/
+////////////////////////////////////////////
+// Hardware
+////////////////////////////////////////////
+// Upload to HiLetgo ESP-32.
+// Manufacturer website: http://www.hiletgo.com/ProductDetail/1906566.html
+// Purchase link: https://www.amazon.com/HiLetgo-ESP-WROOM-32-Development-Microcontroller-Integrated/dp/B0718T232Z
 
-// Wifi config
-#include <ESP8266WiFi.h>          //ESP8266 Core WiFi Library
-#include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
-#include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
-#include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
-WiFiManager wifiManager;
-#define SSID_PREFIX "Under-Cabinet Lights"
-#define WIFI_PASSWORD "wifipassword"
+
+/////////////////////////////////////////////
+// Required Libraries
+/////////////////////////////////////////////
+// Bounce2 - https://github.com/thomasfredericks/Bounce2
+// Chrono - https://github.com/SofaPirate/Chrono
+// NeoPixelBus - https://github.com/Makuna/NeoPixelBus
+// WiFiManager - https://github.com/tzapu/WiFiManager/tree/development as of 7/12/2020 (non-blocking feature not yet in master)
+
+
+//////////////////////////////////////////////
+// Config
+//////////////////////////////////////////////
+// WiFi
 #define WIFI_RESET_BTN_PIN 5
-#define WIFI_RESET_BTN_TYPE INPUT_PULLUP
-#define WIFI_RESET LOW
-#include <Bounce2.h>
-Bounce wifiResetBtn = Bounce();
-
-// OTA config
-#include <ArduinoOTA.h>
-#define OTA_PASSWORD_HASH "36c3c743a4ba3814668066866f2f6089" // MD5 ("otapassword") = 36c3c743a4ba3814668066866f2f6089
-
-// LED config
-#include <FastLED.h>
-#define LED_FPS     30
-#define LED_PIN     4
-#define COLOR_ORDER RGB
-#define CHIPSET     WS2811
-#define NUM_LEDS    8
-#define BRIGHTNESS  90
-#define HUE_RED 0
-#define HUE_YELLOW 64
-#define HUE_GREEN 96
-CRGB leds[NUM_LEDS];
-
-// PIR Sensor config
-#define PIR_SENSOR_PIN  14
-#define MOTION_DETECTED HIGH
-#define PIR_ENABLE_BTN_PIN 12
-#define PIR_ENABLE_BTN_TYPE INPUT_PULLUP
-#define PIR_ENABLED LOW
-Bounce pirSensor = Bounce();
-Bounce pirEnableBtn = Bounce();
-bool pirEnabled = true;
-
-// Photocell config
-#define PHOTOCELL_PIN A0
-#define PHOTOCELL_READS_PER_MINUTE 60
-unsigned long photocellReading = 0;
-
-// Timer conifg
-#include <Chrono.h>
-#include <LightChrono.h>
-LightChrono fillTimer;
-
-// Manual On switch config
+#define WIFI_SSID "Under-Cabinet Lights"
+#define WIFI_PASSWORD "wifipassword"
+// DNS
+#define HOSTNAME "esp32" // hostname is http://esp32.local
+// OTA reprogramming
+#define OTA_PASSWORD "otapassword"
+// LEDs
+#define LEDS_LEFT_PIN 16
+#define LEDS_RIGHT_PIN 17
+#define NUM_LEDS_LEFT 10
+#define NUM_LEDS_RIGHT 10
+#define NUM_LEDS (NUM_LEDS_LEFT + NUM_LEDS_RIGHT)
+#define DAY_BRIGHTNESS 255    // 0 to 255
+#define NIGHT_BRIGHTNESS 80  // 0 to 255
+#define LED_FPS     60
+// Animations
+#define FADE_IN_MILLIS 150
+#define FADE_OUT_MILLIS 350
+// Manual ON switch
 #define MANUAL_ON_PIN 13
-#define MANUAL_ON_TYPE INPUT_PULLUP
-#define MANUAL_ON LOW
-Bounce manualOnSwitch = Bounce();
-bool forceOn = false;
+// PIR
+#define PIR_SENSOR_PIN  14
+#define PIR_ENABLE_BTN_PIN 12
+#define MOTION_ACTIVATION_SECONDS 10    // Length of time to keep LEDs on after motion is detected
+// Photocell
+#define PHOTOCELL_PIN 32
+#define PHOTOCELL_DAY_THRESHOLD 350     // Brightness at which to switch to Day Mode (0 to 4095)
+#define PHOTOCELL_NIGHT_THRESHOLD 200   // Brightness at which to switch to Night Mode (0 to 4095)
 
-// State variables
+
+///////////////////////////////////////////////
+// Definitions and Initialization
+///////////////////////////////////////////////
+// State machine
 enum states {
-    INIT_WIFI_STATE,                // Initail boot state: Either connect to a stored WiFi network or launch an 
-    IDLE_STATE,                     // Everything is off.  Awaiting instructions.
+    IDLE_STATE,                     // Watching for changes in ambient light and awaiting button presses or motion detection.
     LIGHTS_TRANSITION_ON_STATE,     // Manually engaged or movement detected.  Animate turning the LEDs on.
     LIGHTS_ON_STATE,                // LEDs on.  Awaiting input or detecting lack of movement.
     LIGHTS_TRANSITION_OFF_STATE,    // Manually disengaged or lack of movement detected.  Animate turning the LEDs off.
@@ -79,87 +71,172 @@ enum states {
 enum states state = IDLE_STATE;
 bool isTransitioning = true;
 
-// Day/Night brightness settings
-#define PHOTOCELL_DAY_THRESHOLD 350
-#define PHOTOCELL_NIGHT_THRESHOLD 200
-uint8_t DAY_BRIGHTNESS = 255;
-uint8_t NIGHT_BRIGHTNESS = 120;
+// Timer
+#include <Chrono.h>
+#include <LightChrono.h>
+
+// WiFi reset button
+#include <Bounce2.h>
+Bounce wifiResetBtn = Bounce();
+
+// WiFi
+#include <WiFiManager.h>
+WiFiManager wifiManager;
+
+// DNS
+#include <ESPmDNS.h>
+
+// OTA Reprogramming
+#include <ArduinoOTA.h>
+
+// Manual ON switch
+Bounce manualOnSwitch = Bounce();
+bool forceOn = false;
+
+// PIR sensor
+Bounce pirSensor = Bounce();
+Bounce pirEnableBtn = Bounce();
+bool pirEnabled = false;
+Chrono motionActivationTimer = Chrono(Chrono::SECONDS);
+
+// LEDs
+#include <NeoPixelBus.h>
+#include <NeoPixelAnimator.h>
+NeoPixelBus<NeoRgbwFeature, NeoEsp32Rmt2800KbpsMethod> leftLeds(NUM_LEDS_LEFT, LEDS_LEFT_PIN);
+NeoPixelBus<NeoRgbwFeature, NeoEsp32Rmt3800KbpsMethod> rightLeds(NUM_LEDS_RIGHT, LEDS_RIGHT_PIN);
+NeoGamma<NeoGammaTableMethod> colorGamma; // for human eye color correction
+LightChrono nextFrameTimer;
+uint16_t brightness = DAY_BRIGHTNESS;
+RgbwColor red = colorGamma.Correct(RgbwColor(brightness,0,0,0));
+RgbwColor green = colorGamma.Correct(RgbwColor(0,brightness,0,0));
+RgbwColor blue = colorGamma.Correct(RgbwColor(0,0,brightness,0));
+RgbwColor white = colorGamma.Correct(RgbwColor(0,0,0,brightness));
+RgbwColor BLACK(0);
+
+// Day/Night mode
 enum modes {
   DAY_MODE,
   NIGHT_MODE,
 };
 enum modes mode = DAY_MODE;
-uint8_t brightness = DAY_BRIGHTNESS;
 
-
-// Misc variables
-unsigned long TOTAL_ANIM_MILLIS = 700UL;
-
-// Utility methods
-void updateLeds(bool force=false) {
-    // Update the LEDs
-    static LightChrono ledsTimer;
-    if (force || ledsTimer.hasPassed(1000UL / LED_FPS)) {
-        ledsTimer.restart();
-        FastLED.show();
-    }
-}
-
-void clearLeds() {
-    for(uint8_t i=0; i<NUM_LEDS; i++) {
-      leds[i] = CHSV(0, 0, 0);
-    }
-}
-
-void updatePhotocell(bool force=false) {
-  static LightChrono photoTimer;
-  if (force || photoTimer.hasPassed(60000UL / PHOTOCELL_READS_PER_MINUTE)) {
-    photoTimer.restart();
-    photocellReading = analogRead(PHOTOCELL_PIN);
+/////////////////////////////////////
+// Utility Methods
+/////////////////////////////////////
+// Read photocell, and adjust LED brightness mode
+// when ambient light changes between day and night
+void updateDayNightMode() {
+    uint16_t photocellReading = analogRead(PHOTOCELL_PIN);
     Serial.print("Photocell reading: ");
     Serial.println(photocellReading);
+    if (mode == NIGHT_MODE && photocellReading > PHOTOCELL_DAY_THRESHOLD) {
+      // Transition from night to day mode
+      mode = DAY_MODE;
+      brightness = DAY_BRIGHTNESS;
+      Serial.println("It's getting light. Transitioning to day mode.");
+    } else if(mode == DAY_MODE && photocellReading < PHOTOCELL_NIGHT_THRESHOLD) {
+      // Transition from day to night mode
+      mode = NIGHT_MODE;
+      brightness = NIGHT_BRIGHTNESS;
+      Serial.println("It's getting dark. Transitioning to night mode.");
+    }
+}
+
+void drawLeds() {
+    leftLeds.Show();
+    rightLeds.Show();
+}
+
+void fillLeds(RgbwColor color) {
+    leftLeds.ClearTo(color);
+    rightLeds.ClearTo(color);
+}
+
+RgbwColor GetPixelColor(uint16_t index) {
+ if (index < NUM_LEDS_LEFT) {
+     return leftLeds.GetPixelColor(NUM_LEDS_LEFT-1-index);
+ } else {
+   return rightLeds.GetPixelColor(index - NUM_LEDS_LEFT);
+ }
+}
+
+void SetPixelColor(uint16_t index, RgbwColor color) {
+  if (index < NUM_LEDS_LEFT) {
+    leftLeds.SetPixelColor(NUM_LEDS_LEFT-1-index, color);
+  } else {
+    rightLeds.SetPixelColor(index - NUM_LEDS_LEFT, color);
   }
 }
 
-void setup() {
-    delay(100UL); // Give things a moment to power up
+////////////////////////////////
+// Animations
+////////////////////////////////
+NeoPixelAnimator animations(2); // Total number of animations
 
-    // Setup Serial Monitor
-    Serial.begin(9600);
+// Fade in by filling from one side to the other
+void FadeInAcrossAnimUpdate(const AnimationParam& param) {
+  // start the fill slow, end quick
+  float progress = NeoEase::QuadraticIn(param.progress);
+  // fade from partial brightness to full brightness.
+  RgbwColor color = RgbwColor::LinearBlend(colorGamma.Correct(RgbwColor(0,0,0,brightness/3)), colorGamma.Correct(RgbwColor(0,0,0,brightness)), progress);
+  for(uint16_t i=0; i< NUM_LEDS*progress; i++) {
+    SetPixelColor(i, color);
+  }
+}
 
-    // Setup LEDs
-    FastLED.addLeds<CHIPSET, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
-    FastLED.setBrightness( BRIGHTNESS );
-    clearLeds();
+// fade out all evenly
+void FadeOutAnimUpdate(const AnimationParam& param) {
+  // start the fade quickly, end slowly
+  float progress = NeoEase::QuinticOut(param.progress);
+  // fade from partial brightness to full brightness.
+  RgbwColor color = RgbwColor::LinearBlend(colorGamma.Correct(RgbwColor(0,0,0,brightness)), colorGamma.Correct(RgbwColor(0,0,0,0)), progress);
+  fillLeds(color);
+}
 
-    // Setup WiFi
-    // If connection to network stored in memory fails, launch an access point.
-    char ssid[13] = "";
-    sprintf(ssid, "%s %d", SSID_PREFIX, ESP.getChipId());
-    Serial.print("If cannot connect, will lauch ssid: ");
-    Serial.println(ssid);
+////////////////////////////////////////
+// Setup
+////////////////////////////////////////
+void setup()
+{
+    delay(100);
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(LED_BUILTIN, HIGH);
+
+    Serial.begin(115200);
+    while (!Serial); // wait for serial attach
+
+    Serial.println();
+    Serial.println("Initializing...");
+    Serial.flush();
+
+  
+    // Init WiFi
+    // Automatically connect using saved credentials if they exist.
+    // If connection fails it starts an access point with the specified name.
+    WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
     wifiManager.setConfigPortalBlocking(false);
-    wifiManager.autoConnect(ssid, WIFI_PASSWORD);
+    if (wifiManager.autoConnect(WIFI_SSID, WIFI_PASSWORD)) {
+      Serial.println("Wifi connected.");
+    } else {
+      Serial.println("Wifi failed to connect; launching access point.");
+      Serial.print("ssid: ");
+      Serial.println(WIFI_SSID);
+    }
 
-//    // Setup Remote Reprogramming
-//    // Port defaults to 8266
-//    // ArduinoOTA.setPort(8266);
-//  
-//    // Hostname defaults to esp8266-[ChipID]
-//    // ArduinoOTA.setHostname("myesp8266");
-//  
-//    // Password can be set with it's md5 value as well
-//    // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
-    ArduinoOTA.setPasswordHash(OTA_PASSWORD_HASH);
+    // Init DNS
+    if(!MDNS.begin(HOSTNAME)) {
+        Serial.println("Error starting mDNS");
+    }
+
+    // Init OTA Reprogramming
+    ArduinoOTA.setPassword(OTA_PASSWORD);
     ArduinoOTA.onStart([]() {
         String type;
         if (ArduinoOTA.getCommand() == U_FLASH) {
-        type = "sketch";
+          type = "sketch";
         } else { // U_SPIFFS
-        type = "filesystem";
+          type = "filesystem";
         }
-
-        // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
         Serial.println("Start updating " + type);
     });
     ArduinoOTA.onEnd([]() {
@@ -171,95 +248,107 @@ void setup() {
     ArduinoOTA.onError([](ota_error_t error) {
         Serial.printf("Error[%u]: ", error);
         if (error == OTA_AUTH_ERROR) {
-        Serial.println("Auth Failed");
+          Serial.println("Auth Failed");
         } else if (error == OTA_BEGIN_ERROR) {
-        Serial.println("Begin Failed");
+          Serial.println("Begin Failed");
         } else if (error == OTA_CONNECT_ERROR) {
-        Serial.println("Connect Failed");
+          Serial.println("Connect Failed");
         } else if (error == OTA_RECEIVE_ERROR) {
-        Serial.println("Receive Failed");
+          Serial.println("Receive Failed");
         } else if (error == OTA_END_ERROR) {
-        Serial.println("End Failed");
+          Serial.println("End Failed");
         }
     });
     ArduinoOTA.begin();
-
-    // Setup WiFi reset button
-    wifiResetBtn.attach(WIFI_RESET_BTN_PIN, WIFI_RESET_BTN_TYPE);
     
-    // Setup PIR Sensor
+    // Init LEDs
+    leftLeds.Begin();
+    rightLeds.Begin();
+    fillLeds(BLACK);
+    drawLeds();
+
+    // Init WiFi reset button
+    wifiResetBtn.attach(WIFI_RESET_BTN_PIN, INPUT_PULLUP);
+
+    // Init Manual ON switch
+    manualOnSwitch.attach(MANUAL_ON_PIN, INPUT_PULLUP);
+    forceOn = manualOnSwitch.read() == LOW;
+
+    // Init PIR Sensor
     pirSensor.attach(PIR_SENSOR_PIN, INPUT);
-    pirSensor.interval(50); // Use a debounce interval of 50 milliseconds
-    pirEnableBtn.attach(PIR_ENABLE_BTN_PIN, PIR_ENABLE_BTN_TYPE);
-    
-    // Setup manual on switch
-    manualOnSwitch.attach(MANUAL_ON_PIN, MANUAL_ON_TYPE);
-    forceOn = manualOnSwitch.read() == MANUAL_ON;
-    
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, HIGH);
+    pirEnableBtn.attach(PIR_ENABLE_BTN_PIN, INPUT_PULLUP);
+    pirEnableBtn.update();
+    pirEnabled = pirEnableBtn.read() == LOW;
+    pirSensor.update(); // flush first reading so motion change is not immediately detected in loop 
 
-    Serial.println("Setup complete.");
+    // Init Photocell
+    pinMode(PHOTOCELL_PIN, INPUT);
+
+    Serial.println();
+    Serial.println("Running...");
+    digitalWrite(LED_BUILTIN, LOW);
 }
 
-void loop() {
-    // Handle OTA reprogramming
-    ArduinoOTA.handle();
-  
-    // Process the webserver
-    wifiManager.process();
 
-    // Update WiFi reset button
-    if (wifiResetBtn.update() && wifiResetBtn.read() == WIFI_RESET) {
-      clearLeds();
-      updateLeds(true);
-      wifiManager.resetSettings();
-      wifiManager.reboot();
-    }
-    
-    // Update PIR sensor
-    if (pirSensor.update()) {
-      Serial.print("motion change: ");
-      if (pirSensor.read() == MOTION_DETECTED) {
-        Serial.println("detected");
-        digitalWrite(LED_BUILTIN, LOW);
-      } else {
-        Serial.println("lost");
-        digitalWrite(LED_BUILTIN, HIGH);
-      }
-    }
+/////////////////////////////////////
+// Loop
+/////////////////////////////////////
+void loop()
+{
+  // Handle WiFi connections
+  wifiManager.process();
 
+  // Handle OTA reprogramming
+  ArduinoOTA.handle();
 
-    // Update PIR enabled button
-    if (pirEnableBtn.update()) {
-        // Toggle PIR sensor reading on or off
-        pirEnabled = pirEnableBtn.read() == PIR_ENABLED;
-    }
-    
-    // Update manual on switch
-    if (manualOnSwitch.update()) {
-      forceOn = manualOnSwitch.read() == MANUAL_ON;
-      if (forceOn) {
-        Serial.println("Manual On engaged");
-      } else {
-        Serial.println("Manual On disengaged");
-      }
-    }
+  // Handle WiFi reset button
+  wifiResetBtn.update();
+  if (wifiResetBtn.fell()) {
+    wifiManager.resetSettings();
+    wifiManager.reboot();
+  }
 
-    switch (state) {
-        case IDLE_STATE:
-            tickIdle();
-            break;
-        case LIGHTS_TRANSITION_ON_STATE:
-            tickLightsTransitionOn();
-            break;
-        case LIGHTS_ON_STATE:
-            tickLightsOn();
-            break;
-        case LIGHTS_TRANSITION_OFF_STATE:
-            tickLightsTransitionOff();
-            break;
+  // Handle PIR enabled button
+  if (pirEnableBtn.update()) {
+      // Enable or disable PIR sensor reading
+    pirEnabled = pirEnableBtn.fell();
+  }
+
+  // Update PIR sensor
+  if (pirSensor.update()) {
+    Serial.print("motion change: ");
+    if (pirSensor.read() == HIGH) {
+      motionActivationTimer.restart();
+      Serial.println("detected");
+    } else {
+      Serial.println("lost");
     }
+  }
+
+  // Update manual on switch
+  if (manualOnSwitch.update()) {
+    forceOn = manualOnSwitch.fell();
+    if (forceOn) {
+      Serial.println("Manual On engaged");
+    } else {
+      Serial.println("Manual On disengaged");
+    }
+  }
+
+  switch (state) {
+      case IDLE_STATE:
+          tickIdle();
+          break;
+      case LIGHTS_TRANSITION_ON_STATE:
+          tickLightsTransitionOn();
+          break;
+      case LIGHTS_ON_STATE:
+          tickLightsOn();
+          break;
+      case LIGHTS_TRANSITION_OFF_STATE:
+          tickLightsTransitionOff();
+          break;
+  }
 }
 
 
@@ -268,38 +357,20 @@ void loop() {
 ///////////////////////////////////////
 
 // state: IDLE_STATE
-// Everything is off.  Awaiting instructions.
+// Watching for changes in ambient light and awaiting button presses or motion detection.
 void tickIdle() {
   if (isTransitioning) {
     isTransitioning = false;
     // Log the state transition
     Serial.println("AWAITING INPUT");
 
-    clearLeds();
-
-    updateLeds(true);
-    
-    updatePhotocell(true);
-  }
-  
-  // Update ambient light reading
-  updatePhotocell();
-  
-  // When ambient light changes between day and night, change max brightness
-  if (mode == NIGHT_MODE && photocellReading > PHOTOCELL_DAY_THRESHOLD) {
-    // Transition from night to day mode
-    mode = DAY_MODE;
-    brightness = DAY_BRIGHTNESS;
-    Serial.println("It's getting light. Transitioning to day mode.");
-  } else if(mode == DAY_MODE && photocellReading < PHOTOCELL_NIGHT_THRESHOLD) {
-    // Transition from day to night mode
-    mode = NIGHT_MODE;
-    brightness = NIGHT_BRIGHTNESS;
-    Serial.println("It's getting dark. Transitioning to night mode.");
+    fillLeds(BLACK);
+    drawLeds();
   }
   
   // When motion is detected, transition to LIGHTS_TRANSITION_ON_STATE
-  if (pirEnabled && pirSensor.read() == MOTION_DETECTED) {
+  if (pirEnabled && pirSensor.read() == HIGH) {
+    updateDayNightMode();
     state = LIGHTS_TRANSITION_ON_STATE;
     isTransitioning = true;
     return;
@@ -307,6 +378,7 @@ void tickIdle() {
   
   // When manual on switch is engaged, transition to LIGHTS_TRANSITION_ON_STATE
   if (forceOn) {
+    updateDayNightMode();
     state = LIGHTS_TRANSITION_ON_STATE;
     isTransitioning = true;
     return;
@@ -322,32 +394,21 @@ void tickLightsTransitionOn() {
         // Log the state transition
         Serial.println("TURNING LIGHTS ON");
 
-      fillTimer.restart();
+        // Begin animation to fade all LEDs in
+        animations.StartAnimation(0, FADE_IN_MILLIS, FadeInAcrossAnimUpdate);
+        nextFrameTimer.restart();
     }
     
-    if (fillTimer.hasPassed(TOTAL_ANIM_MILLIS)) {
+    if (!animations.IsAnimating()) {
       isTransitioning = true;
       state = LIGHTS_ON_STATE;
       return;
     }
     
-    // fade leds in for 1 second
-    lightProgressive(brightness, fillTimer.elapsed(), 0, TOTAL_ANIM_MILLIS);
-    updateLeds();
-    // old scratchpad stuff but maybe useful someday:
-    // unsigned long MILLIS_PER_LED = TOTAL_ANIM_MILLIS / NUM_LEDS;
-    // uint8_t leds_fully_lit_so_far = NUM_LEDS / (TOTAL_ANIM_MILLIS / fillTimer.elapsed());
-    
-    
-    // if (fillTimer.hasPassed(1000UL / SECONDS_TO_FILL)) {
-    //     fillTimer.restart();
-    //     FastLED.show();
-    // }
-    
-    // // animation for one pixel
-    // // fade from 0 to BRIGHTNESS_TARGET in a percentage of the total animation time millis.
-    // // That percent is `0` for the first pixel and `total_time * (scale * (total_time/pixels))` for the last pixel.
-    
+    if (nextFrameTimer.hasPassed(1000UL / LED_FPS, true)) {
+      animations.UpdateAnimations();
+      drawLeds();
+    }
 }
 
 
@@ -360,14 +421,13 @@ void tickLightsOn() {
         Serial.println("LIGHTS ON");
         
         // Enable all LEDs
-        for(uint8_t i=0; i<NUM_LEDS; i++) {
-          leds[i] = CHSV(0, 0, brightness);
-        }
-        updateLeds(true);
+        fillLeds(RgbwColor(brightness));
+        drawLeds();
     }
     
     // if no motion has been detected for a while, turn the lights off
-    if (!forceOn && (!pirEnabled || pirSensor.read() != MOTION_DETECTED)) {
+    bool motionLost = pirSensor.read() == LOW && motionActivationTimer.hasPassed(MOTION_ACTIVATION_SECONDS);
+    if (!forceOn && (!pirEnabled || motionLost)) {
         state = LIGHTS_TRANSITION_OFF_STATE;
         isTransitioning = true;
         return;
@@ -382,36 +442,20 @@ void tickLightsTransitionOff() {
         isTransitioning = false;
         // Log the state transition
         Serial.println("TURNING LIGHTS OFF");
+
+        // Begin animation to fade all LEDs out
+        animations.StartAnimation(1, FADE_OUT_MILLIS, FadeOutAnimUpdate);
+        nextFrameTimer.restart();
     }
     
-    // TODO implement
-    
-    state = IDLE_STATE;
-    isTransitioning = true;
-}
-
-void lightProgressive(uint8_t max_brightness, unsigned long x, unsigned long min, unsigned long max ) {
-  // Multiply the number of LEDs to light by 100 to so the decimal amount can be stored in an integer.
-  // For example, if NUM_LEDS is 6, x is 53300, min is 0, and max is 60000,
-  // then number of LEDs to light would be 5.33, and we'll store it as the integer 533.
-  // This way we don't have to use any floating point math!
-  unsigned long centiNumLedsToLight = 100 * NUM_LEDS * (x-min) / (max - min);
-  // Dividing this by 100 gets us the number of fully lit LEDs
-  uint8_t numFullyLit = centiNumLedsToLight / 100;
-  // Using modulo 100 to find the remainder, then dividing that by 100,
-  // gets us the percent that the next LED is partially lit.
-  uint8_t partialBrightness = max_brightness * (centiNumLedsToLight % 100) / 100;
-
-  // Light the fully bright LEDs
-  for (uint8_t i=0; i<numFullyLit; i++) {
-    leds[i] = CHSV( 0, 0, max_brightness);
-  }
-  if (numFullyLit < NUM_LEDS) {
-    // Partially light the next LED
-    leds[numFullyLit] = CHSV( 0, 0, partialBrightness);
-    // Clear any remaining LEDs after the partially-lit LED
-    for (uint8_t i = numFullyLit+1; i<NUM_LEDS; i++) {
-      leds[i] = CHSV( 0, 0, 0);
+    if (!animations.IsAnimating()) {
+      isTransitioning = true;
+      state = IDLE_STATE;
+      return;
     }
-  }
+    
+    if (nextFrameTimer.hasPassed(1000UL / LED_FPS, true)) {
+      animations.UpdateAnimations();
+      drawLeds();
+    }
 }
