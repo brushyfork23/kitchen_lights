@@ -4,8 +4,8 @@ Motion-sensing undercabinet kitchen lights.  Fades in bright during the day and 
 
 # Wiring
 
-### Fritzing Diagram:
-![breadboard diagram](fritzing\breadboard_diagram.png)
+![breadboard diagram](fritzing/breadboard_diagram.png)  
+Created with [Fritzing](https://fritzing.org/).
 
 # WiFi
 
