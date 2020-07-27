@@ -56,6 +56,8 @@
 #define PHOTOCELL_PIN 32
 #define PHOTOCELL_DAY_THRESHOLD 350     // Brightness at which to switch to Day Mode (0 to 4095)
 #define PHOTOCELL_NIGHT_THRESHOLD 200   // Brightness at which to switch to Night Mode (0 to 4095)
+// Misc button
+#define MISC_BTN_PIN 15
 
 
 ///////////////////////////////////////////////
@@ -98,6 +100,9 @@ Bounce pirSensor = Bounce();
 Bounce pirEnableBtn = Bounce();
 bool pirEnabled = false;
 Chrono motionActivationTimer = Chrono(Chrono::SECONDS);
+
+// Misc button
+Bounce miscBtn = Bounce();
 
 // LEDs
 #include <NeoPixelBus.h>
@@ -279,7 +284,10 @@ void setup()
     pirEnableBtn.attach(PIR_ENABLE_BTN_PIN, INPUT_PULLUP);
     pirEnableBtn.update();
     pirEnabled = pirEnableBtn.read() == LOW;
-    pirSensor.update(); // flush first reading so motion change is not immediately detected in loop 
+    pirSensor.update(); // flush first reading so motion change is not immediately detected in loop
+
+    // Init Misc button
+    miscBtn.attach(MISC_BTN_PIN, INPUT_PULLUP);
 
     // Init Photocell
     pinMode(PHOTOCELL_PIN, INPUT);
@@ -332,6 +340,15 @@ void loop()
       Serial.println("Manual On engaged");
     } else {
       Serial.println("Manual On disengaged");
+    }
+  }
+
+  // Update the misc button
+  if (miscBtn.update()) {
+    if (miscBtn.fell()) {
+      Serial.println("Misc button pressed");
+    } else {
+      Serial.println("Misc button released");
     }
   }
 
