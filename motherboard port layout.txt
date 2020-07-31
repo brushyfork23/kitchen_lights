@@ -1,0 +1,49 @@
+Motherboard port locations:
+LEDs data 1      25
+LEDs data 2      33
+
+
+
+photocell 1      +3.3v
+pir3             +3.3v
+photocel 2       photo dat + ohm    32
+pir1             GND
+Pir enable sw 1  GND
+Wifi reset sw 2  GND
+Misc button      GND
+GND              GND
+
+
+     26              27               14            12            13
+manual data    Wifi reset data   Pir enable data   pir dat   misc btn data    +5       
+manual data    Wifi reset sw 1   Pir enable sw 1    pir2     misc btn data    +5
+
+
+
+
+
+Bus strip assignments:
+
+GND:
+PCB
+SP105E
+LED1
+LED2
+LED2 return
+PSU
+manual
+
++5:
+PCB
+SP105E
+LED1
+LED2
+LED2 return
+PSU
+
+I/O
+L
+N
+G
+Manual data
+Manual GND
