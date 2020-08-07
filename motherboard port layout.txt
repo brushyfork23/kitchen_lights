@@ -1,30 +1,24 @@
 Motherboard port mapping:
 
-+-------+
-X       |
-|       |
-X       |
-X       |
-+XX-----+
-
-
-LEDs data 1      25
-LEDs data 2      33
-
-
-photocell 1      +3.3v
-pir3             +3.3v
-photocel 2       photo dat + ohm    32
-pir1             GND
-Pir enable sw 1  GND
-Wifi reset sw 2  GND
-Misc button      GND
-GND              GND
-
-
-     26              27               14            12            13
-manual data    Wifi reset data   Pir enable data   pir dat   misc btn data    +5       
-manual data    Wifi reset sw 1   Pir enable sw 1    pir2     misc btn data    +5
+                  ----------------------------------------------------------------------------------
+LEDs data right  |  pin 33                                                                          |
+LEDs data left   |  pin 25                                                                          |
+                 |                                                                                  |
+                 |                                                                                  |
+photocell 1      |  +3.3v                                                                           |
+pir3             |  +3.3v                                                                           |
+photocel 2       |  photocell data & resistor  -  pin 32                                            |
+pir1             |  GND                                                                             |
+Pir enable sw 1  |  GND                                                                             |
+Wifi reset sw 2  |  GND                                                                             |
+Misc button      |  GND                                                                             |
+GND              |  GND                                                                             |
+                 |                                                                                  |
+                 |                                                                                  |
+                 |    pin 26           pin 27            pin 14        pin 12       pin 13      +5v |
+                 | manual data   Wifi reset data   Pir enable data   pir data   misc btn data   +5v |      
+                  ----------------------------------------------------------------------------------
+                   manual data   Wifi reset sw 1   Pir enable sw 1     pir2     misc btn data   +5v 
 
 
 
@@ -32,27 +26,14 @@ manual data    Wifi reset sw 1   Pir enable sw 1    pir2     misc btn data    +5
 
 Bus strip assignments:
 
-+5:
-PCB
-SP105E
-LED1
-LED2
-LED2 return
-PSU
-
-GND:
-PCB
-SP105E
-LED1
-LED2
-LED2 return
-PSU
-manual
-
-
-I/O
-L
-N
-G
-Manual data
-Manual GND
++-------------+-------------+-------------+
+|    +5       |     GND     |    I/O      |
++-------------+-------------+-------------+
+|    PCB      |     PCB     |  AC Live    |
+|   SP105E    |   SPE105E   | AC Neutral  |
+|    LED1     |    LED1     | AC Ground   |
+|    LED2     |    LED2     | Manual data |
+| LED2 return | LED2 return | Manual GND  |
+|    PSU      |     PSU     |             |
+|             |  Manual sw  |             |
++-------------+-------------+-------------+
