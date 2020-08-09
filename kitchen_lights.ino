@@ -27,7 +27,7 @@
 // Config
 //////////////////////////////////////////////
 // WiFi
-#define WIFI_RESET_BTN_PIN 5
+#define WIFI_RESET_BTN_PIN 27
 #define WIFI_SSID "Under-Cabinet Lights"
 #define WIFI_PASSWORD "wifipassword"
 // DNS
@@ -35,8 +35,8 @@
 // OTA reprogramming
 #define OTA_PASSWORD "otapassword"
 // LEDs
-#define LEDS_LEFT_PIN 16
-#define LEDS_RIGHT_PIN 17
+#define LEDS_LEFT_PIN 25
+#define LEDS_RIGHT_PIN 33
 #define NUM_LEDS_LEFT 10
 #define NUM_LEDS_RIGHT 10
 #define NUM_LEDS (NUM_LEDS_LEFT + NUM_LEDS_RIGHT)
@@ -47,15 +47,17 @@
 #define FADE_IN_MILLIS 150
 #define FADE_OUT_MILLIS 350
 // Manual ON switch
-#define MANUAL_ON_PIN 13
+#define MANUAL_ON_PIN 26
 // PIR
-#define PIR_SENSOR_PIN  14
-#define PIR_ENABLE_BTN_PIN 12
+#define PIR_SENSOR_PIN  12
+#define PIR_ENABLE_BTN_PIN 14
 #define MOTION_ACTIVATION_SECONDS 10    // Length of time to keep LEDs on after motion is detected
 // Photocell
 #define PHOTOCELL_PIN 32
 #define PHOTOCELL_DAY_THRESHOLD 350     // Brightness at which to switch to Day Mode (0 to 4095)
 #define PHOTOCELL_NIGHT_THRESHOLD 200   // Brightness at which to switch to Night Mode (0 to 4095)
+// Misc button
+#define MISC_BTN_PIN 13
 
 
 ///////////////////////////////////////////////
@@ -98,6 +100,9 @@ Bounce pirSensor = Bounce();
 Bounce pirEnableBtn = Bounce();
 bool pirEnabled = false;
 Chrono motionActivationTimer = Chrono(Chrono::SECONDS);
+
+// Misc button
+Bounce miscBtn = Bounce();
 
 // LEDs
 #include <NeoPixelBus.h>
@@ -279,7 +284,10 @@ void setup()
     pirEnableBtn.attach(PIR_ENABLE_BTN_PIN, INPUT_PULLUP);
     pirEnableBtn.update();
     pirEnabled = pirEnableBtn.read() == LOW;
-    pirSensor.update(); // flush first reading so motion change is not immediately detected in loop 
+    pirSensor.update(); // flush first reading so motion change is not immediately detected in loop
+
+    // Init Misc button
+    miscBtn.attach(MISC_BTN_PIN, INPUT_PULLUP);
 
     // Init Photocell
     pinMode(PHOTOCELL_PIN, INPUT);
@@ -332,6 +340,15 @@ void loop()
       Serial.println("Manual On engaged");
     } else {
       Serial.println("Manual On disengaged");
+    }
+  }
+
+  // Update the misc button
+  if (miscBtn.update()) {
+    if (miscBtn.fell()) {
+      Serial.println("Misc button pressed");
+    } else {
+      Serial.println("Misc button released");
     }
   }
 
