@@ -10,7 +10,7 @@ pir3             |  +3.3v                                                       
 photocel 2       |  photocell data & resistor  -  pin 32                                            |
 pir1             |  GND                                                                             |
 Pir enable sw 1  |  GND                                                                             |
-Wifi reset sw 2  |  GND                                                                             |
+Wifi rst btn 2   |  GND                                                                             |
 Misc button      |  GND                                                                             |
 GND              |  GND                                                                             |
                  |                                                                                  |
@@ -18,7 +18,7 @@ GND              |  GND                                                         
                  |    pin 26           pin 27            pin 14        pin 12       pin 13      +5v |
                  | manual data   Wifi reset data   Pir enable data   pir data   misc btn data   +5v |      
                   ----------------------------------------------------------------------------------
-                   manual data   Wifi reset sw 1   Pir enable sw 1     pir2     misc btn data   +5v 
+                   manual data   Wifi rst btn 1    Pir enable sw 2     pir2     misc btn data   +5v 
 
 
 
