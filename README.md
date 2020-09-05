@@ -1,6 +1,30 @@
 # Undercabinet Lights
 
-Motion-sensing undercabinet kitchen lights.  Fades in bright during the day and dim during the night.
+Motion-sensing undercabinet kitchen lights.  Fades in bright during the day and dim during the night.  
+A switch on the side toggles on party mode, where patterned lights are controlled by a phone app.  
+The motion-sensing, brightness-sensing, light-fading normal mode is controlled by an ESP32.  
+The color-changing party mode and phone app connection is controlled by an SP105E. 
+
+# Assembled Enclosure
+
+This assembly shows a rough representation of the components placed in the enclosure.  The enclosure will be mounted to the underside of a corner kitchen cabinet, positioned so that the PIR sensor and Photocell have a good view of the entire room.  
+  
+These objects were modeled in [Solidworks](https://www.solidworks.com/).  
+
+* Front  
+![assembly front](3d/kitchen_lights_controller_assembly_front.PNG)  
+* Back  
+![assembly front](3d/kitchen_lights_controller_assembly_back.PNG)  
+
+# Parts to print  
+  
+  There are 3 parts to the enclosure which must be printed.  
+  * Outer Box
+    ![outer box](3d/outer_box_back.PNG)  
+  * Sliding cover for the USB port
+    ![usb port sliding cover](3d/usb_port_sliding_cover.PNG)  
+  * Harness for the sliding cover
+    ![usb port sliding cover](3d/usb_port_sliding_cover_harness.PNG)  
 
 # Wiring
 
