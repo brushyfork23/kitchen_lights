@@ -12,19 +12,19 @@ This assembly shows a rough representation of the components placed in the enclo
 These objects were modeled in [Solidworks](https://www.solidworks.com/).  
 
 * Front  
-![assembly front](3d/kitchen_lights_controller_assembly_front.PNG)  
+![assembly front](3d/renders/kitchen_lights_controller_assembly_front.PNG)  
 * Back  
-![assembly front](3d/kitchen_lights_controller_assembly_back.PNG)  
+![assembly front](3d/renders/kitchen_lights_controller_assembly_back.PNG)  
 
 # Parts to print  
   
   There are 3 parts to the enclosure which must be printed.  
   * Outer Box
-    ![outer box](3d/outer_box_back.PNG)  
+    ![outer box](3d/renders/outer_box_back.PNG)  
   * Sliding cover for the USB port
-    ![usb port sliding cover](3d/usb_port_sliding_cover.PNG)  
+    ![usb port sliding cover](3d/renders/USB_port_sliding_cover.PNG)  
   * Harness for the sliding cover
-    ![usb port sliding cover](3d/usb_port_sliding_cover_harness.PNG)  
+    ![usb port sliding cover](3d/renders/USB_port_sliding_cover_harness.PNG)  
 
 # Wiring
 
