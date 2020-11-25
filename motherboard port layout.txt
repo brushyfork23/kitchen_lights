@@ -1,8 +1,8 @@
 Motherboard port mapping:
 
                   ----------------------------------------------------------------------------------
-LEDs data right  |  pin 33                                                                          |
-LEDs data left   |  pin 25                                                                          |
+LEDs data left   |  pin 33                                                                          |
+LEDs data right  |  pin 25                                                                          |
                  |                                                                                  |
                  |                                                                                  |
 photocell 1      |  +3.3v                                                                           |
@@ -29,11 +29,12 @@ Bus strip assignments:
 +-------------+-------------+-------------+
 |    +5       |     GND     |    I/O      |
 +-------------+-------------+-------------+
-|    PCB      |     PCB     |  AC Live    |
+|    PSU      |     PCB     |  AC Live    |
 |   SP105E    |   SPE105E   | AC Neutral  |
 |    LED1     |    LED1     | AC Ground   |
 |    LED2     |    LED2     | Manual data |
 | LED2 return | LED2 return | Manual GND  |
-|    PSU      |     PSU     |             |
+|             |     PSU     |             |
 |             |  Manual sw  |             |
 +-------------+-------------+-------------+
+

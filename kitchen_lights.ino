@@ -35,10 +35,10 @@
 // OTA reprogramming
 #define OTA_PASSWORD "otapassword"
 // LEDs
-#define LEDS_LEFT_PIN 25
-#define LEDS_RIGHT_PIN 33
+#define LEDS_LEFT_PIN 33
+#define LEDS_RIGHT_PIN 25
 #define NUM_LEDS_LEFT 10
-#define NUM_LEDS_RIGHT 10
+#define NUM_LEDS_RIGHT 93
 #define NUM_LEDS (NUM_LEDS_LEFT + NUM_LEDS_RIGHT)
 #define DAY_BRIGHTNESS 255    // 0 to 255
 #define NIGHT_BRIGHTNESS 80  // 0 to 255
